@@ -35,8 +35,6 @@ object DeviceHelper {
 
     private var fetchingName = false
 
-    private const val DEVICE_DATABASE = "https://storage.googleapis.com/play_public/supported_devices.csv"
-
     private val NAME_INVALID_CHARACTERS_REGEX = "[\"',;:.!?()\\[\\]<>]".toRegex()
     const val MAX_DEVICE_NAME_LENGTH = 32
 
@@ -70,54 +68,9 @@ object DeviceHelper {
             && !fetchingName
         ) {
             fetchingName = true
-            backgroundFetchDeviceName(context)
             return Build.MODEL
         }
         return preferences.getString(KEY_DEVICE_NAME_PREFERENCE, Build.MODEL)!!
-    }
-
-    private fun backgroundFetchDeviceName(context: Context) {
-        ThreadHelper.execute {
-            try {
-                val url = URL(DEVICE_DATABASE)
-                val connection = url.openConnection()
-
-                // If we get here we managed to download the file. Mark that as done so we don't try again even if we don't end up finding a name.
-                val preferences = PreferenceManager.getDefaultSharedPreferences(context)
-                preferences.edit { putBoolean(KEY_DEVICE_NAME_FETCHED_FROM_THE_INTERNET, true) }
-
-                BufferedReader(
-                    InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_16)
-                ).use { reader ->
-                    val settings = CsvParserSettings()
-                    settings.isHeaderExtractionEnabled = true
-                    val parser = CsvParser(settings)
-                    var found = false
-                    for (records in parser.iterate(reader)) {
-                        if (records.size < 4) {
-                            continue
-                        }
-                        val buildModel = records[3]
-                        if (Build.MODEL.equals(buildModel, ignoreCase = true)) {
-                            val deviceName = records[1]
-                            Log.i("DeviceHelper", "Got device name: $deviceName")
-                            // Update the shared preference. Places that display the name should be listening to this change and update it
-                            setDeviceName(context, deviceName)
-                            found = true
-                            break
-                        }
-                    }
-                    if (!found) {
-                        Log.e("DeviceHelper", "Didn't find a device name for " + Build.MODEL)
-                    }
-                }
-            } catch (e: IOException) {
-                e.printStackTrace()
-            } catch (e: TextParsingException) {
-                e.printStackTrace()
-            }
-            fetchingName = false
-        }
     }
 
     fun setDeviceName(context: Context, name: String) {
